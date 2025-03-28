@@ -1,11 +1,12 @@
-package org.example.springtlgbot.service;
+package org.example.springtlgbot.controller;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.example.springtlgbot.entity.SomeRepository;
-import org.example.springtlgbot.entity.UserRepository;
+import org.example.springtlgbot.repository.UserRepository;
 import org.example.springtlgbot.entity.Users;
 import org.example.springtlgbot.entity.Vehicle;
+import org.example.springtlgbot.service.SparePartService;
+import org.example.springtlgbot.service.VehicleService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -31,7 +32,11 @@ public class TelegramBot extends TelegramLongPollingBot {
     private UserRepository userRepository;
 
     @Autowired
-    private SomeRepository someRepository;
+    private VehicleService vehicleService;
+
+    @Autowired
+    private SparePartService sparePartService;
+
 
     boolean flag;
 
@@ -63,13 +68,13 @@ public class TelegramBot extends TelegramLongPollingBot {
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
-            log.info(update.getMessage().getChat().getFirstName() + " " + update.getMessage().getChat().getLastName() + " " + messageText);
+            log.info(update.getMessage().getChat().getFirstName() + " " + update.getMessage().getChat().getLastName() + ": " + messageText);
             if (!flag) {
                 switch (messageText) {
                     case "/start":
                         registerUser(update.getMessage());
                         startCommandRecieved(chatId, update.getMessage().getChat().getFirstName());
-                        log.info("Started command received " + chatId);
+                        log.info("Приветствие отправлено для " + update.getMessage().getChat().getFirstName() + " " + chatId);
                         break;
                     case "/addnewcar":
                         sendMessage(chatId, "Введите в формате \n brand-model-generation");
@@ -81,7 +86,9 @@ public class TelegramBot extends TelegramLongPollingBot {
                 }
             } else {
                 log.info("Creating new car");
+                //System.out.println(vehicleService.getAvailableCars());
                 processCarData(update.getMessage());
+
                 flag = false;
             }
 
@@ -97,34 +104,27 @@ public class TelegramBot extends TelegramLongPollingBot {
             String brand = matcher.group(1);
             String model = matcher.group(2);
             int generation = Integer.parseInt(matcher.group(3));
-            addNewCar(brand, model, generation);
+            //addNewCar(brand, model, generation);
+            Vehicle newCar = new Vehicle();
+            newCar.setBrand(brand);
+            newCar.setModel(model);
+            newCar.setGeneration(generation);
+            var existing = vehicleService.checkAndAddVehicle(newCar);
+            System.out.println(existing.toString());
+            log.info(sparePartService.getSparePartsForVehicle(existing).toString());
             sendMessage(message.getChatId(), "Успешно добавлено");
         } else {
-            sendMessage(message.getChatId(), "Invalid car data format. Please enter data in the format 'brand-model-generation'. \nдля шляпников: \nБРЭНД на английском буквами \nМОДЕЛЬ на английском буквами \nГЕНЕРАЦИЯ цифрами (4 цифры) это год выпуска");
-            log.info("Invalid car data format. Please enter data in the format");
+            sendMessage(message.getChatId(), "Неверно введено авто. " +
+                    "\nНеобходимый формат: " +
+                    "\nБРЭНД на английском буквами " +
+                    "\nМОДЕЛЬ на английском буквами " +
+                    "\nГЕНЕРАЦИЯ цифрами (4 цифры) это год выпуска " +
+                    "\nПопробуйте заново (после очередного вызова функции из меню)");
+            log.info(message.getChat().getFirstName() + ": неверно ввел авто");
         }
-//        if (userRepository.findById(message.getChatId()).isEmpty()) {
-//            var chatId = message.getChatId();
-//            Users user = Users.builder()
-//                    .id(chatId)
-//                    .name(message.getChat().getFirstName())
-//                    .build();
-//
-//            userRepository.save(user);
-//            log.info("Registered user " + chatId);
-
     }
 
-    private void addNewCar(String brand, String model, int generation) {
 
-        Vehicle newCar = new Vehicle();
-        newCar.setBrand(brand);
-        newCar.setModel(model);
-        newCar.setGeneration(generation);
-        someRepository.save(newCar);
-        log.info("New car added: " + newCar);
-
-    }
 
     private void registerUser(Message message) {
         if (userRepository.findById(message.getChatId()).isEmpty()) {
@@ -133,9 +133,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                     .id(chatId)
                     .name(message.getChat().getFirstName())
                     .build();
-
             userRepository.save(user);
-            log.info("Registered user " + chatId);
+            log.info("Registered user: " + chatId);
         }
     }
 
@@ -153,46 +152,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         try {
             execute(sendMessage);
         } catch (TelegramApiException e) {
-            //log.error("Error here " + e.getMessage());
+
         }
     }
-
-//    private static void processCarData(String carData) {
-//        final Pattern CAR_DATA_PATTERN = Pattern.compile("^([a-zA-Z]+)-([a-zA-Z0-9]+)-([0-9]{4})$");
-//        Matcher matcher = CAR_DATA_PATTERN.matcher(carData);
-//        if (matcher.matches()) {
-//            String brand = matcher.group(1);
-//            String model = matcher.group(2);
-//            int generation = Integer.parseInt(matcher.group(3));
-//            addNewCar(brand, model, generation);
-//        } else {
-//            System.out.println("Invalid car data format. Please enter data in the format 'brand-model-generation'.");
-//        }
-//    }
-
-//    private static void addNewCar(String brand, String model, int generation) {
-////        if (userRepository.findById(message.getChatId()).isEmpty()) {
-////            var chatId = message.getChatId();
-////            Users user = Users.builder()
-////                    .id(chatId)
-////                    .name(message.getChat().getFirstName())
-////                    .build();
-////
-////            userRepository.save(user);
-////            log.info("Registered user " + chatId);
-////        }
-//
-//
-//                Vehicle newCar = new Vehicle();
-//                newCar.setBrand(brand);
-//                newCar.setModel(model);
-//                newCar.setGeneration(generation);
-//                someRepository
-//                session1.merge(newCar);
-//                System.out.println("New car added: " + newCar);
-//            } else {
-//                System.out.println("Car already exists: " + existingCar);
-//            }
-//        }
-//    }
 }

@@ -1,7 +1,7 @@
 package org.example.springtlgbot.config;
 
 import lombok.extern.slf4j.Slf4j;
-import org.example.springtlgbot.service.TelegramBot;
+import org.example.springtlgbot.controller.TelegramBot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;

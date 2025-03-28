@@ -33,7 +33,7 @@ public class SparePart {
     //@Column(name = "stock")
     private Integer stock;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne//(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id")
-    private Vehicle vehicleId;
+    private Vehicle vehicle;
 }

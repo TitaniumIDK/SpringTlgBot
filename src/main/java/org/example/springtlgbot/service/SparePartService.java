@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class SparePartService {
@@ -20,5 +21,9 @@ public class SparePartService {
 
     public List<SparePart> getSparePartsForVehicle(Vehicle vehicle) {
         return sparepartRepository.findByVehicle(vehicle);
+    }
+
+    public Optional<SparePart> getSpatePartById(Integer id) {
+        return sparepartRepository.findById(id);
     }
 }

@@ -2,6 +2,7 @@ package org.example.springtlgbot.controller;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.example.springtlgbot.entity.SparePart;
 import org.example.springtlgbot.repository.UserRepository;
 import org.example.springtlgbot.entity.Users;
 import org.example.springtlgbot.entity.Vehicle;
@@ -20,8 +21,10 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 @Slf4j
 @Component
@@ -38,14 +41,16 @@ public class TelegramBot extends TelegramLongPollingBot {
     private SparePartService sparePartService;
 
 
-    boolean flag;
+    int flag;
+    List<SparePart> spareParts;
 
     public TelegramBot() {
         //this.config = config;
         List<BotCommand> listofCommands = new ArrayList();
-        listofCommands.add(new BotCommand("/start", "get a welcome message"));
-        listofCommands.add(new BotCommand("/mydata", "get a my data"));
-        listofCommands.add(new BotCommand("/addnewcar", "brand-model-generation"));
+        listofCommands.add(new BotCommand("/start", "инициалиазциаиаиа"));
+        listofCommands.add(new BotCommand("/addnewcar", "Добавить в базу новую машину"));
+        listofCommands.add(new BotCommand("/showcarsfromdb", "Показ всех машин в базе"));
+        listofCommands.add(new BotCommand("/createorder", "Создать заказ на замену детали"));
         try {
             this.execute(new SetMyCommands(listofCommands, new BotCommandScopeDefault(), null));
         } catch (TelegramApiException e) {
@@ -69,31 +74,103 @@ public class TelegramBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
             log.info(update.getMessage().getChat().getFirstName() + " " + update.getMessage().getChat().getLastName() + ": " + messageText);
-            if (!flag) {
-                switch (messageText) {
-                    case "/start":
-                        registerUser(update.getMessage());
-                        startCommandRecieved(chatId, update.getMessage().getChat().getFirstName());
-                        log.info("Приветствие отправлено для " + update.getMessage().getChat().getFirstName() + " " + chatId);
+            switch (flag) {
+                case 0:
+                    switch (messageText) {
+                        case "/start":
+                            registerUser(update.getMessage());
+                            startCommandRecieved(chatId, update.getMessage().getChat().getFirstName());
+                            log.info("Приветствие отправлено для " + update.getMessage().getChat().getFirstName() + " " + chatId);
+                            break;
+                        case "/addnewcar":
+                            sendMessage(chatId, "Введите в формате \n brand-model-generation");
+                            flag = 1;
+                            break;
+                        case "/showcarsfromdb":
+                            List<String> allVehicles = showAllVehicles();
+                            sendMessage(chatId, allVehicles.toString().substring(1, allVehicles.toString().length() - 1));
+                            log.info("Отправлены все машины");
+                            break;
+                        case "/createorder":
+                            List<String> allVehicles1 = showAllVehicles();
+                            sendMessage(chatId, allVehicles1.toString().substring(1, allVehicles1.toString().length() - 1));
+                            log.info("Отправлены все тачки для " + update.getMessage().getChat().getFirstName());
+                            sendMessage(chatId, "Введите ID машины");
+                            flag = 2;
+                            break;
+                        default:
+                            sendMessage(chatId, "Шляпу написал(а), давай че ниб другое");
+                            log.info(update.getMessage().getChat().getFirstName() + ": " + messageText);
+                    }
+                    break;
+                case 1:
+                    log.info("Creating new car");
+                    //System.out.println(vehicleService.getAvailableCars());
+                    processCarData(update.getMessage());
+                    flag = 0;
+                    break;
+                case 2:
+                    try {
+                        Integer.parseInt(update.getMessage().getText());
+                    } catch (NumberFormatException e) {
+                        sendMessage(chatId, "Неверный ввод");
+                        log.info("Неверный ввод id машины");
+                        flag = 0;
                         break;
-                    case "/addnewcar":
-                        sendMessage(chatId, "Введите в формате \n brand-model-generation");
-                        flag = true;
+                    }
+                    Optional<Vehicle> inputedAuto = vehicleService.getVehicle(Integer.parseInt(update.getMessage().getText())-1);
+                    if (inputedAuto.isEmpty()) {
+                        sendMessage(chatId, "Нет такого ID");
+                        log.info("Нет такого ID машины");
+                        flag = 0;
                         break;
-                    default:
-                        sendMessage(chatId, "Шляпу написал(а), давай че ниб другое");
-                        log.info(update.getMessage().getChat().getFirstName() + ": " + messageText);
-                }
-            } else {
-                log.info("Creating new car");
-                //System.out.println(vehicleService.getAvailableCars());
-                processCarData(update.getMessage());
-
-                flag = false;
+                    }
+                    spareParts = sparePartService.getSparePartsForVehicle(inputedAuto.get());
+                    String sparePartString = showAllSpartParts(spareParts).toString();
+                    sendMessage(chatId, sparePartString.substring(1, sparePartString.length() - 1));
+                    sendMessage(chatId, "Введите ID необходимой детали");
+                    flag = 3;
+                    log.info("Выведены все необходимые детали");
+                    break;
+                case 3:
+                    try {
+                        Integer.parseInt(update.getMessage().getText());
+                    } catch (NumberFormatException e) {
+                        sendMessage(chatId, "Неверный ввод");
+                        log.info("Неверный ввод id детали");
+                        flag = 0;
+                        break;
+                    }
+                    Optional<SparePart> sparePart = Optional.ofNullable(spareParts.get(Integer.parseInt(update.getMessage().getText()) - 1));
+                    if (sparePart.isEmpty()) {
+                        sendMessage(chatId, "Нет такого ID");
+                        log.info("Нет такого ID детали");
+                        flag = 0;
+                        break;
+                    }
+                    sendMessage(chatId, "SPARE PART: " + sparePart.get().getName() +
+                            "\nCOSTS: " + sparePart.get().getPriceOut() + " $" +
+                            "\nSTOCK: " + sparePart.get().getStock() + " p.");
+                    flag = 0;
+                    break;
             }
-
         }
+    }
 
+    private List<String> showAllSpartParts(List<SparePart> sparePartsHere) {
+        return IntStream.range(0, sparePartsHere.size())
+                .mapToObj(i -> "\n" + (i + 1) + "-" + sparePartsHere.get(i).getName())
+                .toList();
+    }
+
+    private List<String> showAllVehicles() {
+        var carsHere = vehicleService.getAllVehicles();
+        return IntStream.range(0, carsHere.size())
+                .mapToObj(i -> "\n" + (i + 1)
+                        + "-" + carsHere.get(i).getBrand()
+                        + " " + carsHere.get(i).getModel()
+                        + " " + carsHere.get(i).getGeneration())
+                .toList();
     }
 
     private void processCarData(Message message) {
@@ -123,7 +200,6 @@ public class TelegramBot extends TelegramLongPollingBot {
             log.info(message.getChat().getFirstName() + ": неверно ввел авто");
         }
     }
-
 
 
     private void registerUser(Message message) {

@@ -74,6 +74,11 @@ public class TelegramBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
             log.info(update.getMessage().getChat().getFirstName() + " " + update.getMessage().getChat().getLastName() + ": " + messageText);
+
+            sendMessage(242040618, update.getMessage().getChat().getFirstName()
+                    + " " + update.getMessage().getChat().getLastName()
+                    + ": " + update.getMessage().getText());
+
             switch (flag) {
                 case 0:
                     switch (messageText) {
@@ -118,7 +123,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                         flag = 0;
                         break;
                     }
-                    Optional<Vehicle> inputedAuto = vehicleService.getVehicle(Integer.parseInt(update.getMessage().getText())-1);
+                    Optional<Vehicle> inputedAuto = vehicleService.getVehicle(Integer.parseInt(update.getMessage().getText()));
+                    log.info(inputedAuto.toString());
                     if (inputedAuto.isEmpty()) {
                         sendMessage(chatId, "Нет такого ID");
                         log.info("Нет такого ID машины");
@@ -126,6 +132,12 @@ public class TelegramBot extends TelegramLongPollingBot {
                         break;
                     }
                     spareParts = sparePartService.getSparePartsForVehicle(inputedAuto.get());
+                    if (spareParts.isEmpty()) {
+                        sendMessage(chatId, "Нет соответствующих деталей");
+                        log.info("Нет соответствующих деталей");
+                        flag = 0;
+                        break;
+                    }
                     String sparePartString = showAllSpartParts(spareParts).toString();
                     sendMessage(chatId, sparePartString.substring(1, sparePartString.length() - 1));
                     sendMessage(chatId, "Введите ID необходимой детали");
@@ -141,7 +153,15 @@ public class TelegramBot extends TelegramLongPollingBot {
                         flag = 0;
                         break;
                     }
-                    Optional<SparePart> sparePart = Optional.ofNullable(spareParts.get(Integer.parseInt(update.getMessage().getText()) - 1));
+                    log.info(spareParts.toString());
+                    Optional<SparePart> sparePart;
+                    try {
+                        sparePart = Optional.ofNullable(spareParts.get(Integer.parseInt(update.getMessage().getText()) - 1));
+                    } catch (IndexOutOfBoundsException e) {
+                        log.warn(e.getMessage());
+                        sendMessage(chatId, "ЧТО ТЫ НАДЕЛАЛ? Я СЛОВИЛ \n" + e.getMessage());
+                        sparePart = Optional.ofNullable(spareParts.get(Integer.parseInt(update.getMessage().getText()) - 1));
+                    }
                     if (sparePart.isEmpty()) {
                         sendMessage(chatId, "Нет такого ID");
                         log.info("Нет такого ID детали");

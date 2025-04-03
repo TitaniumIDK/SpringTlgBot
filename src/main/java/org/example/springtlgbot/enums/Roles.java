@@ -1,4 +1,4 @@
-package org.example.springtlgbot.entity;
+package org.example.springtlgbot.enums;
 
 public enum Roles {
     MANAGER, MECHANIC, ADMINISTRATOR

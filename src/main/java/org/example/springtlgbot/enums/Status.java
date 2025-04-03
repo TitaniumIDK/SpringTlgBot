@@ -1,4 +1,4 @@
-package org.example.springtlgbot.entity;
+package org.example.springtlgbot.enums;
 
 public enum Status {
     NEW, IN_PROCESS, FINISHED

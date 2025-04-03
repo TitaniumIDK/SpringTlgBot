@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
+import org.example.springtlgbot.enums.BusynessType;
+
 import java.time.LocalDate;
 
 

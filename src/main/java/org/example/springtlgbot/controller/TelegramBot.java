@@ -1,11 +1,13 @@
 package org.example.springtlgbot.controller;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.example.springtlgbot.entity.SparePart;
+import org.example.springtlgbot.entity.*;
+import org.example.springtlgbot.enums.BusynessType;
 import org.example.springtlgbot.repository.UserRepository;
-import org.example.springtlgbot.entity.Users;
-import org.example.springtlgbot.entity.Vehicle;
+import org.example.springtlgbot.service.EmployeeService;
+import org.example.springtlgbot.service.ScheduleService;
 import org.example.springtlgbot.service.SparePartService;
 import org.example.springtlgbot.service.VehicleService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,18 +21,21 @@ import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import javax.annotation.CheckForNull;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Slf4j
 @Component
 public class TelegramBot extends TelegramLongPollingBot {
 
-    //final BotConfig config;
     @Autowired
     private UserRepository userRepository;
 
@@ -40,9 +45,19 @@ public class TelegramBot extends TelegramLongPollingBot {
     @Autowired
     private SparePartService sparePartService;
 
+    @Autowired
+    private EmployeeService employeeService;
+
+    @Autowired
+    private ScheduleService scheduleService;
 
     int flag;
     List<SparePart> spareParts;
+    List<Employee> mechanics;
+    Optional<SparePart> sparePart;
+    Map<LocalDate, List<BusynessType>> scheduleForEmployee;
+    Optional<Vehicle> inputedAuto;
+    Employee inputedEmployee;
 
     public TelegramBot() {
         //this.config = config;
@@ -104,7 +119,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                             flag = 2;
                             break;
                         default:
-                            sendMessage(chatId, "Шляпу написал(а), давай че ниб другое");
+                            sendMessage(chatId, "Для этой команды нет функций");
                             log.info(update.getMessage().getChat().getFirstName() + ": " + messageText);
                     }
                     break;
@@ -123,7 +138,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                         flag = 0;
                         break;
                     }
-                    Optional<Vehicle> inputedAuto = vehicleService.getVehicle(Integer.parseInt(update.getMessage().getText()));
+                    inputedAuto = vehicleService.getVehicle(Integer.parseInt(update.getMessage().getText()));
                     log.info(inputedAuto.toString());
                     if (inputedAuto.isEmpty()) {
                         sendMessage(chatId, "Нет такого ID");
@@ -154,7 +169,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                         break;
                     }
                     log.info(spareParts.toString());
-                    Optional<SparePart> sparePart;
+
                     try {
                         sparePart = Optional.ofNullable(spareParts.get(Integer.parseInt(update.getMessage().getText()) - 1));
                     } catch (IndexOutOfBoundsException e) {
@@ -171,10 +186,92 @@ public class TelegramBot extends TelegramLongPollingBot {
                     sendMessage(chatId, "SPARE PART: " + sparePart.get().getName() +
                             "\nCOSTS: " + sparePart.get().getPriceOut() + " $" +
                             "\nSTOCK: " + sparePart.get().getStock() + " p.");
-                    flag = 0;
+
+                    mechanics = employeeService.getMechanics();
+                    sendMessage(chatId, "Доступные мастера:\n" + showAllMechanics(mechanics).toString()
+                            .substring(1, showAllMechanics(mechanics).toString().length() - 1));
+                    sendMessage(chatId, "Введите ID мастера");
+                    flag = 4;
                     break;
+                case 4:
+                    try {
+                        Integer.parseInt(update.getMessage().getText());
+                    } catch (NumberFormatException e) {
+                        sendMessage(chatId, "Неверный ввод");
+                        log.info("Неверный ввод идентификатора");
+                        flag = 0;
+                        break;
+                    }
+                    scheduleForEmployee = scheduleConvertor(
+                            scheduleService.getSchedulesByEmployee(
+                                    mechanics.get(Integer.parseInt(update.getMessage().getText()) - 1))
+                    );
+                    inputedEmployee = mechanics.get(Integer.parseInt(update.getMessage().getText()) - 1);
+                    for (Map.Entry<LocalDate, List<BusynessType>> entry : scheduleForEmployee.entrySet()) {
+                        sendMessage(chatId,
+                                entry.getKey() + ":\n" +
+                                        "\n9:00-12:00   (1): " + ((entry.getValue().get(0) == BusynessType.FREE) ? "Свободно" : "Занято") +
+                                        "\n12:00-15:00 (2): " + ((entry.getValue().get(1) == BusynessType.FREE) ? "Свободно" : "Занято") +
+                                        "\n15:00-18:00 (3): " + ((entry.getValue().get(2) == BusynessType.FREE) ? "Свободно" : "Занято"));
+                    }
+
+
+                    sendMessage(chatId, "Введите желаемую дату и время в формате:" + "\n" +
+                            "ГГГГ-MM-ЧЧ *номер времени дня*" + "\nПример: <2024-05-26 3>");
+
+                    flag = 5;
+                    break;
+                case 5:
+                    Pattern pattern = Pattern.compile("^(\\d{4})-(\\d{2})-(\\d{2}) ([1-3])$");
+                    Matcher matcher = pattern.matcher(update.getMessage().getText());
+                    System.out.println(update.getMessage().getText());
+                    if (matcher.matches()) {
+                        LocalDate date = LocalDate.parse(matcher.group(1) + "-" + matcher.group(2) + "-" + matcher.group(3));
+                        int number = Integer.parseInt(matcher.group(4));
+                        if (scheduleForEmployee.get(date)
+                                .get(number - 1)
+                                .equals(BusynessType.FREE)) {
+                            sparePartService.reduceStock(sparePart.get().getId());
+                            scheduleService.updateBusynessType(inputedEmployee, date, BusynessType.BUSY, number);
+                            sendMessage(chatId, "Заказ успешно размещен. Ждем Вас на замену " +
+                                    sparePart.get().getName() + " для атвомобиля " + inputedAuto.get().getBrand() + " " +
+                                    inputedAuto.get().getModel() + " " + date + " к " +
+                                    (number == 1 ? "9:00" : (number == 2) ? "12:00" : "15:00") + ". Мастер " +
+                                    inputedEmployee.getName() + " " + inputedEmployee.getSurname() + ".");
+                            flag = 0;
+                            break;
+                        } else {
+                            sendMessage(chatId, "Выбранное время занято. Попробуйте все сначала");
+                            flag = 0;
+                            break;
+                        }
+                    } else {
+                        sendMessage(chatId, "Некорректно введена дата. Попробуйте все сначала");
+                        flag = 0;
+                        break;
+                    }
             }
         }
+    }
+
+    private void CreateOrder(Vehicle inputedAuto, SparePart sparePart, Employee inputedEmployee, LocalDate date, int number) {
+
+    }
+
+    private Map<LocalDate, List<BusynessType>> scheduleConvertor(List<Schedule> scheduleAll) {
+        Map<LocalDate, List<BusynessType>> schedule;
+        schedule = scheduleAll.stream()
+                .collect(Collectors.toMap(
+                        Schedule::getWorkDate, s -> List.of(s.getFirstThird(), s.getSecondThird(), s.getThirdThird())
+                ));
+        return schedule;
+    }
+
+    private List<String> showAllMechanics(List<Employee> mechanics) {
+        return IntStream.range(0, mechanics.size())
+                .mapToObj(i -> "\n" + (i + 1) + "-" + mechanics.get(i).getName() + " " +
+                        mechanics.get(i).getSurname())
+                .toList();
     }
 
     private List<String> showAllSpartParts(List<SparePart> sparePartsHere) {

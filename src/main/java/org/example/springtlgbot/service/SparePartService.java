@@ -1,5 +1,6 @@
 package org.example.springtlgbot.service;
 
+import jakarta.transaction.Transactional;
 import org.example.springtlgbot.entity.SparePart;
 import org.example.springtlgbot.entity.Vehicle;
 import org.example.springtlgbot.repository.SparePartRepository;
@@ -25,5 +26,13 @@ public class SparePartService {
 
     public Optional<SparePart> getSpatePartById(Integer id) {
         return sparepartRepository.findById(id);
+    }
+
+    @Transactional
+    public void reduceStock(Integer sparePartId) {
+        int updatedRows = sparepartRepository.decreaseStock(sparePartId);
+        if (updatedRows == 0) {
+            throw new IllegalArgumentException("Недостаточно запасов или деталь не найдена.");
+        }
     }
 }

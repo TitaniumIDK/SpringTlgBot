@@ -6,10 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.springtlgbot.entity.*;
 import org.example.springtlgbot.enums.BusynessType;
 import org.example.springtlgbot.repository.UserRepository;
-import org.example.springtlgbot.service.EmployeeService;
-import org.example.springtlgbot.service.ScheduleService;
-import org.example.springtlgbot.service.SparePartService;
-import org.example.springtlgbot.service.VehicleService;
+import org.example.springtlgbot.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -36,20 +33,12 @@ import java.util.stream.IntStream;
 @Component
 public class TelegramBot extends TelegramLongPollingBot {
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private VehicleService vehicleService;
-
-    @Autowired
-    private SparePartService sparePartService;
-
-    @Autowired
-    private EmployeeService employeeService;
-
-    @Autowired
-    private ScheduleService scheduleService;
+    private final UserRepository userRepository;
+    private final VehicleService vehicleService;
+    private final SparePartService sparePartService;
+    private final EmployeeService employeeService;
+    private final ScheduleService scheduleService;
+    private final OrderService orderService;
 
     int flag;
     List<SparePart> spareParts;
@@ -59,7 +48,8 @@ public class TelegramBot extends TelegramLongPollingBot {
     Optional<Vehicle> inputedAuto;
     Employee inputedEmployee;
 
-    public TelegramBot() {
+    @Autowired
+    public TelegramBot(UserRepository userRepository, VehicleService vehicleService, SparePartService sparePartService, EmployeeService employeeService, ScheduleService scheduleService, OrderService orderService) {
         //this.config = config;
         List<BotCommand> listofCommands = new ArrayList();
         listofCommands.add(new BotCommand("/start", "инициалиазциаиаиа"));
@@ -71,6 +61,12 @@ public class TelegramBot extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             throw new RuntimeException(e);
         }
+        this.userRepository = userRepository;
+        this.vehicleService = vehicleService;
+        this.sparePartService = sparePartService;
+        this.employeeService = employeeService;
+        this.scheduleService = scheduleService;
+        this.orderService = orderService;
     }
 
     @Override
@@ -233,6 +229,7 @@ public class TelegramBot extends TelegramLongPollingBot {
                                 .equals(BusynessType.FREE)) {
                             sparePartService.reduceStock(sparePart.get().getId());
                             scheduleService.updateBusynessType(inputedEmployee, date, BusynessType.BUSY, number);
+                            orderService.createOrderForMechanic(inputedAuto.get(), sparePart.get(), inputedEmployee);
                             sendMessage(chatId, "Заказ успешно размещен. Ждем Вас на замену " +
                                     sparePart.get().getName() + " для атвомобиля " + inputedAuto.get().getBrand() + " " +
                                     inputedAuto.get().getModel() + " " + date + " к " +

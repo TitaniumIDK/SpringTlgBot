@@ -3,6 +3,7 @@ package org.example.springtlgbot.controller;
 import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.example.springtlgbot.dto.OrderDTO;
 import org.example.springtlgbot.entity.*;
 import org.example.springtlgbot.enums.BusynessType;
 import org.example.springtlgbot.repository.UserRepository;
@@ -229,7 +230,15 @@ public class TelegramBot extends TelegramLongPollingBot {
                                 .equals(BusynessType.FREE)) {
                             sparePartService.reduceStock(sparePart.get().getId());
                             scheduleService.updateBusynessType(inputedEmployee, date, BusynessType.BUSY, number);
-                            orderService.createOrderForMechanic(inputedAuto.get(), sparePart.get(), inputedEmployee);
+                            OrderDTO orderDTO = OrderDTO.builder()
+                                    .master(inputedEmployee)
+                                    .vehicle(inputedAuto.get())
+                                    .sparePart(sparePart.get())
+                                    .build();
+
+                            System.out.println(orderDTO.toString());
+
+                            orderService.createOrderForMechanic(orderDTO);
                             sendMessage(chatId, "Заказ успешно размещен. Ждем Вас на замену " +
                                     sparePart.get().getName() + " для атвомобиля " + inputedAuto.get().getBrand() + " " +
                                     inputedAuto.get().getModel() + " " + date + " к " +
